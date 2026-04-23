@@ -4,7 +4,7 @@ interface BillRecord {
   category: string;
   title: string;
   amount: number;
-  time: string;
+  timestamp: number;
 }
 
 interface CategoryMeta {
@@ -24,6 +24,17 @@ interface TrendPoint {
   label: string;
   amount: number;
   count: number;
+}
+
+interface AiCategoryRule {
+  type: string;
+  category: string;
+  keywords: string[];
+}
+
+interface AiTypeRule {
+  type: string;
+  keywords: string[];
 }
 
 interface ThemeMeta {
@@ -61,7 +72,30 @@ const THEMES: ThemeMeta[] = [
   { name: '沉静紫', primary: '#7F75A8', soft: '#EFECF6', surface: '#F8F7FB', warn: '#D46D62' }
 ];
 
-const TREND_LABELS: string[] = ['周一', '周二', '周三', '周四', '周五', '昨天', '今天'];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const AMOUNT_MAX_LENGTH = 10;
+const NOTE_MAX_LENGTH = 40;
+const AI_TEXT_MAX_LENGTH = 80;
+const SEED_NOW = new Date().getTime();
+
+const AI_TYPE_RULES: AiTypeRule[] = [
+  { type: '收入', keywords: ['赚', '挣', '收入', '收到', '收款', '入账', '转入', '报销', '退款', '奖金', '发薪', '工资', '兼职', '副业', '外快', '利息', '分红', '红包'] },
+  { type: '支出', keywords: ['花', '买', '付', '支付', '消费', '支出', '扣款', '缴费', '充值', '订阅', '打车', '地铁', '公交', '外卖'] }
+];
+
+const AI_CATEGORY_RULES: AiCategoryRule[] = [
+  { type: '收入', category: '兼职', keywords: ['兼职', '副业', '外快', '赚', '挣'] },
+  { type: '收入', category: '工资', keywords: ['工资', '薪水', '发薪', '奖金'] },
+  { type: '收入', category: '理财', keywords: ['理财', '利息', '分红'] },
+  { type: '收入', category: '红包', keywords: ['红包'] },
+  { type: '支出', category: '交通', keywords: ['地铁', '公交', '打车', '出租', '高铁', '机票'] },
+  { type: '支出', category: '餐饮', keywords: ['饭', '餐', '咖啡', '奶茶', '外卖', '早餐', '午饭', '晚饭'] },
+  { type: '支出', category: '购物', keywords: ['买', '购物', '衣服', '鞋', '生活用品'] },
+  { type: '支出', category: '娱乐', keywords: ['电影', '游戏', '演出', '会员'] },
+  { type: '支出', category: '学习', keywords: ['课程', '书', '学习', '培训'] },
+  { type: '支出', category: '医疗', keywords: ['药', '医院', '体检', '看病'] },
+  { type: '支出', category: '旅行', keywords: ['旅行', '酒店', '景区', '门票'] }
+];
 
 @Entry
 @Component
@@ -73,17 +107,38 @@ struct Index {
   @State amountText: string = '';
   @State noteText: string = '';
   @State aiText: string = '';
+  @State recordDateText: string = '';
+  @State formMessage: string = '';
   @State editingId: number = -1;
+  @State nextRecordId: number = 7;
   @State monthlyBudget: number = 3000;
   @State themeIndex: number = 0;
+  @State cachedExpenseTotal: number = 0;
+  @State cachedIncomeTotal: number = 0;
+  @State cachedExpenseCount: number = 0;
+  @State cachedIncomeCount: number = 0;
+  @State cachedExpenseStats: CategoryStat[] = [];
+  @State cachedIncomeStats: CategoryStat[] = [];
+  @State cachedExpenseTrend: TrendPoint[] = [];
+  @State cachedIncomeTrend: TrendPoint[] = [];
+  @State cachedLargestExpenseTitle: string = '暂无记录';
+  @State cachedLargestIncomeTitle: string = '暂无记录';
+  @State cachedLargestExpenseAmount: number = 0;
+  @State cachedLargestIncomeAmount: number = 0;
   @State records: BillRecord[] = [
-    { id: 1, type: '支出', category: '餐饮', title: '午饭', amount: 35, time: '今天 12:20' },
-    { id: 2, type: '支出', category: '交通', title: '地铁通勤', amount: 7, time: '今天 08:45' },
-    { id: 3, type: '收入', category: '工资', title: '四月工资', amount: 8200, time: '昨天 18:00' },
-    { id: 4, type: '支出', category: '购物', title: '生活用品', amount: 128.5, time: '昨天 20:10' },
-    { id: 5, type: '支出', category: '娱乐', title: '电影票', amount: 48, time: '周二 21:30' },
-    { id: 6, type: '支出', category: '学习', title: '课程订阅', amount: 199, time: '周一 09:15' }
+    { id: 1, type: '支出', category: '餐饮', title: '午饭', amount: 35, timestamp: SEED_NOW - 2 * 60 * 60 * 1000 },
+    { id: 2, type: '支出', category: '交通', title: '地铁通勤', amount: 7, timestamp: SEED_NOW - 6 * 60 * 60 * 1000 },
+    { id: 3, type: '收入', category: '工资', title: '四月工资', amount: 8200, timestamp: SEED_NOW - DAY_MS },
+    { id: 4, type: '支出', category: '购物', title: '生活用品', amount: 128.5, timestamp: SEED_NOW - DAY_MS },
+    { id: 5, type: '支出', category: '娱乐', title: '电影票', amount: 48, timestamp: SEED_NOW - 3 * DAY_MS },
+    { id: 6, type: '支出', category: '学习', title: '课程订阅', amount: 199, timestamp: SEED_NOW - 4 * DAY_MS }
   ];
+
+  aboutToAppear(): void {
+    this.recordDateText = this.formatDateInput(new Date().getTime());
+    this.nextRecordId = this.findNextRecordId();
+    this.refreshStats();
+  }
 
   private currentTheme(): ThemeMeta {
     if (this.themeIndex < 0 || this.themeIndex >= THEMES.length) {
@@ -93,13 +148,7 @@ struct Index {
   }
 
   private totalByType(type: string): number {
-    let total = 0;
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === type) {
-        total += item.amount;
-      }
-    });
-    return total;
+    return type === '支出' ? this.cachedExpenseTotal : this.cachedIncomeTotal;
   }
 
   private expenseTotal(): number {
@@ -125,7 +174,7 @@ struct Index {
     return value.toFixed(value % 1 === 0 ? 0 : 2);
   }
 
-  private nextId(): number {
+  private findNextRecordId(): number {
     let maxId = 0;
     this.records.forEach((item: BillRecord) => {
       if (item.id > maxId) {
@@ -133,6 +182,70 @@ struct Index {
       }
     });
     return maxId + 1;
+  }
+
+  private padNumber(value: number): string {
+    return value < 10 ? `0${value}` : `${value}`;
+  }
+
+  private formatDateInput(timestamp: number): string {
+    const date = new Date(timestamp);
+    return `${date.getFullYear()}-${this.padNumber(date.getMonth() + 1)}-${this.padNumber(date.getDate())}`;
+  }
+
+  private formatShortDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    return `${this.padNumber(date.getMonth() + 1)}/${this.padNumber(date.getDate())}`;
+  }
+
+  private formatRecordTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    return `${this.formatDateInput(timestamp)} ${this.padNumber(date.getHours())}:${this.padNumber(date.getMinutes())}`;
+  }
+
+  private parseDateInput(value: string): number {
+    const normalized = value.trim();
+    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return -1;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return -1;
+    }
+    return date.getTime();
+  }
+
+  private selectedRecordDate(): Date {
+    const timestamp = this.parseDateInput(this.recordDateText);
+    return timestamp >= 0 ? new Date(timestamp) : new Date();
+  }
+
+  private openRecordDatePicker(): void {
+    DatePickerDialog.show({
+      start: new Date(2000, 0, 1),
+      end: new Date(2100, 11, 31),
+      selected: this.selectedRecordDate(),
+      onDateAccept: (value: Date) => {
+        this.recordDateText = this.formatDateInput(value.getTime());
+        this.formMessage = '';
+      }
+    });
+  }
+
+  private sanitizeText(value: string, maxLength: number): string {
+    let result = '';
+    for (let index = 0; index < value.length && result.length < maxLength; index++) {
+      const char = value.charAt(index);
+      if (char !== '\n' && char !== '\r' && char !== '\t') {
+        result += char;
+      }
+    }
+    return result;
   }
 
   private currentCategories(): CategoryMeta[] {
@@ -169,25 +282,7 @@ struct Index {
     return count;
   }
 
-  private countByType(type: string): number {
-    let count = 0;
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === type) {
-        count++;
-      }
-    });
-    return count;
-  }
-
-  private averageByType(type: string): number {
-    const count = this.countByType(type);
-    if (count === 0) {
-      return 0;
-    }
-    return this.totalByType(type) / count;
-  }
-
-  private categoryStats(type: string): CategoryStat[] {
+  private buildCategoryStats(type: string): CategoryStat[] {
     const metas = type === '支出' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
     const total = this.totalByType(type);
     let stats: CategoryStat[] = [];
@@ -207,6 +302,88 @@ struct Index {
     return stats;
   }
 
+  private startOfDay(timestamp: number): number {
+    const date = new Date(timestamp);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0).getTime();
+  }
+
+  private buildTrendPoints(type: string): TrendPoint[] {
+    const todayStart = this.startOfDay(new Date().getTime());
+    let points: TrendPoint[] = [];
+    for (let index = 6; index >= 0; index--) {
+      const dayStart = todayStart - index * DAY_MS;
+      points.push({ label: this.formatShortDate(dayStart), amount: 0, count: 0 });
+    }
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type) {
+        const dayDiff = Math.floor((this.startOfDay(item.timestamp) - (todayStart - 6 * DAY_MS)) / DAY_MS);
+        if (dayDiff >= 0 && dayDiff < points.length) {
+          points[dayDiff].amount += item.amount;
+          points[dayDiff].count++;
+        }
+      }
+    });
+    return points;
+  }
+
+  private refreshStats(): void {
+    let expenseTotal = 0;
+    let incomeTotal = 0;
+    let expenseCount = 0;
+    let incomeCount = 0;
+    let largestExpenseAmount = 0;
+    let largestIncomeAmount = 0;
+    let largestExpenseTitle = '暂无记录';
+    let largestIncomeTitle = '暂无记录';
+
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === '支出') {
+        expenseTotal += item.amount;
+        expenseCount++;
+        if (item.amount > largestExpenseAmount) {
+          largestExpenseAmount = item.amount;
+          largestExpenseTitle = item.title;
+        }
+      } else {
+        incomeTotal += item.amount;
+        incomeCount++;
+        if (item.amount > largestIncomeAmount) {
+          largestIncomeAmount = item.amount;
+          largestIncomeTitle = item.title;
+        }
+      }
+    });
+
+    this.cachedExpenseTotal = expenseTotal;
+    this.cachedIncomeTotal = incomeTotal;
+    this.cachedExpenseCount = expenseCount;
+    this.cachedIncomeCount = incomeCount;
+    this.cachedLargestExpenseTitle = largestExpenseTitle;
+    this.cachedLargestIncomeTitle = largestIncomeTitle;
+    this.cachedLargestExpenseAmount = largestExpenseAmount;
+    this.cachedLargestIncomeAmount = largestIncomeAmount;
+    this.cachedExpenseStats = this.buildCategoryStats('支出');
+    this.cachedIncomeStats = this.buildCategoryStats('收入');
+    this.cachedExpenseTrend = this.buildTrendPoints('支出');
+    this.cachedIncomeTrend = this.buildTrendPoints('收入');
+  }
+
+  private countByType(type: string): number {
+    return type === '支出' ? this.cachedExpenseCount : this.cachedIncomeCount;
+  }
+
+  private averageByType(type: string): number {
+    const count = this.countByType(type);
+    if (count === 0) {
+      return 0;
+    }
+    return this.totalByType(type) / count;
+  }
+
+  private categoryStats(type: string): CategoryStat[] {
+    return type === '支出' ? this.cachedExpenseStats : this.cachedIncomeStats;
+  }
+
   private topCategoryStat(type: string): CategoryStat {
     const stats = this.categoryStats(type);
     if (stats.length > 0) {
@@ -215,44 +392,20 @@ struct Index {
     return { name: '暂无', color: '#8A8F98', total: 0, count: 0, rate: 0 };
   }
 
-  private recordDayIndex(time: string): number {
-    if (time.indexOf('刚刚') >= 0 || time.indexOf('今天') >= 0) {
-      return 6;
-    }
-    if (time.indexOf('昨天') >= 0) {
-      return 5;
-    }
-    if (time.indexOf('周一') >= 0) {
-      return 0;
-    }
-    if (time.indexOf('周二') >= 0) {
-      return 1;
-    }
-    if (time.indexOf('周三') >= 0) {
-      return 2;
-    }
-    if (time.indexOf('周四') >= 0) {
-      return 3;
-    }
-    if (time.indexOf('周五') >= 0 || time.indexOf('周六') >= 0 || time.indexOf('周日') >= 0) {
-      return 4;
-    }
-    return 6;
+  private sortRecordsByTime(records: BillRecord[]): BillRecord[] {
+    return records.sort((left: BillRecord, right: BillRecord) => right.timestamp - left.timestamp);
   }
 
   private trendPoints(type: string): TrendPoint[] {
-    let points: TrendPoint[] = [];
-    for (let index = 0; index < TREND_LABELS.length; index++) {
-      points.push({ label: TREND_LABELS[index], amount: 0, count: 0 });
-    }
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === type) {
-        const dayIndex = this.recordDayIndex(item.time);
-        points[dayIndex].amount += item.amount;
-        points[dayIndex].count++;
-      }
-    });
-    return points;
+    return type === '支出' ? this.cachedExpenseTrend : this.cachedIncomeTrend;
+  }
+
+  private trendKey(point: TrendPoint): string {
+    return `${this.reportType}-${point.label}`;
+  }
+
+  private categoryRankKey(item: CategoryStat): string {
+    return `${this.reportType}-${item.name}`;
   }
 
   private maxTrendAmount(type: string): number {
@@ -274,25 +427,11 @@ struct Index {
   }
 
   private largestRecordTitle(type: string): string {
-    let title = '暂无记录';
-    let amount = 0;
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === type && item.amount > amount) {
-        title = item.title;
-        amount = item.amount;
-      }
-    });
-    return title;
+    return type === '支出' ? this.cachedLargestExpenseTitle : this.cachedLargestIncomeTitle;
   }
 
   private largestRecordAmount(type: string): number {
-    let amount = 0;
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === type && item.amount > amount) {
-        amount = item.amount;
-      }
-    });
-    return amount;
+    return type === '支出' ? this.cachedLargestExpenseAmount : this.cachedLargestIncomeAmount;
   }
 
   private reportPrimaryColor(): string {
@@ -308,6 +447,36 @@ struct Index {
       return 0;
     }
     return Math.max(this.balance() / this.incomeTotal() * 100, 0);
+  }
+
+  private recordedDayCount(): number {
+    let days: string[] = [];
+    this.records.forEach((item: BillRecord) => {
+      const day = this.formatDateInput(item.timestamp);
+      if (days.indexOf(day) < 0) {
+        days.push(day);
+      }
+    });
+    return days.length;
+  }
+
+  private categoryAmountInRange(category: string, startTime: number, endTime: number): number {
+    let total = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === '支出' && item.category === category && item.timestamp >= startTime && item.timestamp < endTime) {
+        total += item.amount;
+      }
+    });
+    return total;
+  }
+
+  private diningExpenseImproved(): boolean {
+    const todayStart = this.startOfDay(new Date().getTime());
+    const recentStart = todayStart - 2 * DAY_MS;
+    const previousStart = todayStart - 5 * DAY_MS;
+    const recentAmount = this.categoryAmountInRange('餐饮', recentStart, todayStart + DAY_MS);
+    const previousAmount = this.categoryAmountInRange('餐饮', previousStart, recentStart);
+    return previousAmount > 0 && recentAmount <= previousAmount * 0.9;
   }
 
   private reportAdvice(): string {
@@ -331,11 +500,18 @@ struct Index {
   private saveRecord(): void {
     const amount = Number(this.amountText);
     if (!amount || amount <= 0) {
+      this.formMessage = '请输入大于0的金额';
       return;
     }
-    const title = this.noteText.trim().length > 0 ? this.noteText.trim() : this.selectedCategory;
-    if (this.editingId > 0) {
-      this.records = this.records.map((item: BillRecord) => {
+
+    const timestamp = this.parseDateInput(this.recordDateText);
+    if (timestamp < 0) {
+      this.formMessage = '日期格式需为 YYYY-MM-DD';
+      return;
+    }
+      const title = this.noteText.trim().length > 0 ? this.noteText.trim() : this.selectedCategory;
+      if (this.editingId > 0) {
+      this.records = this.sortRecordsByTime(this.records.map((item: BillRecord) => {
         if (item.id === this.editingId) {
           return {
             id: item.id,
@@ -343,22 +519,24 @@ struct Index {
             category: this.selectedCategory,
             title: title,
             amount: amount,
-            time: item.time
+            timestamp: timestamp
           };
         }
         return item;
-      });
+      }));
     } else {
       const newRecord: BillRecord = {
-        id: this.nextId(),
+        id: this.nextRecordId,
         type: this.recordType,
         category: this.selectedCategory,
         title: title,
         amount: amount,
-        time: '刚刚'
+        timestamp: timestamp
       };
-      this.records = [newRecord].concat(this.records);
+      this.records = this.sortRecordsByTime([newRecord].concat(this.records));
+      this.nextRecordId++;
     }
+    this.refreshStats();
     this.clearForm();
   }
 
@@ -366,6 +544,8 @@ struct Index {
     this.amountText = '';
     this.noteText = '';
     this.aiText = '';
+    this.formMessage = '';
+    this.recordDateText = this.formatDateInput(new Date().getTime());
     this.editingId = -1;
     this.recordType = '支出';
     this.selectedCategory = '餐饮';
@@ -376,22 +556,27 @@ struct Index {
     this.selectedCategory = record.category;
     this.amountText = `${record.amount}`;
     this.noteText = record.title;
+    this.recordDateText = this.formatDateInput(record.timestamp);
+    this.formMessage = '';
     this.editingId = record.id;
     this.activeTab = 0;
   }
 
   private deleteRecord(id: number): void {
     this.records = this.records.filter((item: BillRecord) => item.id !== id);
+    this.refreshStats();
   }
 
   private appendDigit(value: string): void {
     if (value === '.' && this.amountText.indexOf('.') >= 0) {
       return;
     }
-    if (this.amountText.length >= 10) {
+    if (this.amountText.length >= AMOUNT_MAX_LENGTH) {
+      this.formMessage = `金额最多${AMOUNT_MAX_LENGTH}位`;
       return;
     }
     this.amountText += value;
+    this.formMessage = '';
   }
 
   private normalizeAmount(value: string): string {
@@ -405,43 +590,77 @@ struct Index {
         result += char;
         hasDot = true;
       }
-      if (result.length >= 10) {
+      if (result.length >= AMOUNT_MAX_LENGTH) {
+        this.formMessage = `金额最多${AMOUNT_MAX_LENGTH}位`;
         break;
       }
     }
     return result;
   }
 
-  private parseAiText(): void {
-    const text = this.aiText.trim();
+  private containsKeyword(text: string, keywords: string[]): boolean {
+    for (let index = 0; index < keywords.length; index++) {
+      if (text.indexOf(keywords[index]) >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private inferTextType(text: string): string {
+    for (let index = 0; index < AI_TYPE_RULES.length; index++) {
+      const rule = AI_TYPE_RULES[index];
+      if (this.containsKeyword(text, rule.keywords)) {
+        return rule.type;
+      }
+    }
+    return this.recordType;
+  }
+
+  private inferTextCategory(text: string, type: string): string {
+    for (let index = 0; index < AI_CATEGORY_RULES.length; index++) {
+      const rule = AI_CATEGORY_RULES[index];
+      if (rule.type === type && this.containsKeyword(text, rule.keywords)) {
+        return rule.category;
+      }
+    }
+
+    const categories = type === '收入' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    for (let index = 0; index < categories.length; index++) {
+      if (categories[index].name === this.selectedCategory) {
+        return this.recordType === type ? this.selectedCategory : '其他';
+      }
+    }
+    return type === '收入' ? '其他' : '其他';
+  }
+
+  private cleanRecognizedTitle(text: string, fallback: string): string {
+    let title = text.replace(/\d+(\.\d+)?/g, '')
+      .replace(/今天|昨天|刚刚|本月|这个月/g, '')
+      .replace(/元|块|人民币/g, '')
+      .replace(/赚了|挣了|收入|收到|收款|入账|转入|报销|退款|花了|消费|支出|支付|付了|买了/g, '')
+      .replace(/^\s+|\s+$/g, '');
+    title = this.sanitizeText(title, NOTE_MAX_LENGTH);
+    return title.length > 0 ? title : fallback;
+  }
+
+  private parseSmartText(): void {
+    const text = this.sanitizeText(this.aiText, AI_TEXT_MAX_LENGTH).trim();
     if (text.length === 0) {
+      this.formMessage = '请输入要识别的账单内容';
       return;
     }
     const match = text.match(/\d+(\.\d+)?/);
     if (match) {
       this.amountText = match[0];
     }
-    if (text.indexOf('工资') >= 0 || text.indexOf('收入') >= 0 || text.indexOf('兼职') >= 0) {
-      this.recordType = '收入';
-      this.selectedCategory = text.indexOf('兼职') >= 0 ? '兼职' : '工资';
-    } else {
-      this.recordType = '支出';
-      if (text.indexOf('饭') >= 0 || text.indexOf('餐') >= 0 || text.indexOf('咖啡') >= 0 || text.indexOf('奶茶') >= 0) {
-        this.selectedCategory = '餐饮';
-      } else if (text.indexOf('地铁') >= 0 || text.indexOf('打车') >= 0 || text.indexOf('公交') >= 0) {
-        this.selectedCategory = '交通';
-      } else if (text.indexOf('买') >= 0 || text.indexOf('购物') >= 0) {
-        this.selectedCategory = '购物';
-      } else if (text.indexOf('电影') >= 0 || text.indexOf('游戏') >= 0) {
-        this.selectedCategory = '娱乐';
-      } else {
-        this.selectedCategory = '其他';
-      }
-    }
-    this.noteText = text.replace(/\d+(\.\d+)?/g, '').replace(/块|元|花了|今天/g, '').trim();
-    if (this.noteText.length === 0) {
-      this.noteText = this.selectedCategory;
-    }
+
+    const nextType = this.inferTextType(text);
+    const nextCategory = this.inferTextCategory(text, nextType);
+    this.recordType = nextType;
+    this.selectedCategory = nextCategory;
+    this.noteText = this.cleanRecognizedTitle(text, nextCategory);
+    this.formMessage = `已按规则识别为${nextType} · ${nextCategory}`;
   }
 
   @Builder
@@ -571,7 +790,7 @@ struct Index {
           .fontWeight(FontWeight.Medium)
           .fontColor('#1F272D')
           .maxLines(1)
-        Text(`${item.category} · ${item.time}`)
+        Text(`${item.category} · ${this.formatRecordTime(item.timestamp)}`)
           .fontSize(12)
           .fontColor('#7A838C')
       }
@@ -690,7 +909,7 @@ struct Index {
               .maxLines(1)
           }
           .layoutWeight(1)
-        }, (point: TrendPoint) => point.label)
+        }, (point: TrendPoint) => this.trendKey(point))
       }
     }
     .width('100%')
@@ -746,7 +965,7 @@ struct Index {
               .backgroundColor('#EDF0F1')
               .height(7)
           }
-        }, (item: CategoryStat) => item.name)
+        }, (item: CategoryStat) => this.categoryRankKey(item))
       }
     }
     .width('100%')
@@ -823,18 +1042,18 @@ struct Index {
           colors: [[this.currentTheme().primary, 0], ['#7E9C9A', 1]]
         })
 
-        this.SectionTitle(this.editingId > 0 ? '编辑账单' : '快捷记账', 'AI识别')
+        this.SectionTitle(this.editingId > 0 ? '编辑账单' : '快捷记账', '文本识别')
         Column({ space: 10 }) {
-          TextInput({ placeholder: '试试：今天午饭花了35块', text: this.aiText })
+          TextInput({ placeholder: '试试：今天赚了500 / 午饭花了35块', text: this.aiText })
             .height(36)
             .fontSize(12)
             .borderRadius(16)
             .backgroundColor('#F5F7F7')
             .onChange((value: string) => {
-              this.aiText = value;
+              this.aiText = this.sanitizeText(value, AI_TEXT_MAX_LENGTH);
             })
           Row({ space: 10 }) {
-            Button('识别账单')
+            Button('识别')
               .fontSize(12)
               .fontColor('#FFFFFF')
               .height(34)
@@ -842,7 +1061,7 @@ struct Index {
               .backgroundColor(this.currentTheme().primary)
               .layoutWeight(1)
               .onClick(() => {
-                this.parseAiText();
+                this.parseSmartText();
               })
             Button(this.editingId > 0 ? '取消编辑' : '重置')
               .fontSize(12)
@@ -881,14 +1100,38 @@ struct Index {
           .borderRadius(18)
           .backgroundColor('#F7F9F9')
           this.CategoryGrid()
-          TextInput({ placeholder: '备注，例如：午饭、奶茶、工资', text: this.noteText })
+          Row() {
+            Text(this.recordDateText)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#1E252B')
+            Blank()
+            Text('选择日期')
+              .fontSize(12)
+              .fontColor(this.currentTheme().primary)
+          }
+            .height(40)
+            .width('100%')
+            .padding({ left: 12, right: 12 })
+            .borderRadius(16)
+            .backgroundColor('#F5F7F7')
+            .onClick(() => {
+              this.openRecordDatePicker();
+            })
+          TextInput({ placeholder: '备注可选，留空会使用分类名', text: this.noteText })
             .height(36)
             .fontSize(12)
             .borderRadius(16)
             .backgroundColor('#F5F7F7')
             .onChange((value: string) => {
-              this.noteText = value;
+              this.noteText = this.sanitizeText(value, NOTE_MAX_LENGTH);
             })
+          if (this.formMessage.length > 0) {
+            Text(this.formMessage)
+              .fontSize(12)
+              .fontColor(this.formMessage.indexOf('请输入') >= 0 || this.formMessage.indexOf('格式') >= 0 ? '#D46D62' : '#687078')
+              .width('100%')
+          }
           Row({ space: 10 }) {
             Button('清空')
               .fontSize(12)
@@ -899,6 +1142,7 @@ struct Index {
               .layoutWeight(1)
               .onClick(() => {
                 this.amountText = '';
+                this.formMessage = '';
               })
             Button(this.editingId > 0 ? '保存修改' : '完成记账')
               .fontSize(13)
@@ -1034,10 +1278,10 @@ struct Index {
         this.SectionTitle('挑战赛')
         Row({ space: 12 }) {
           this.ChallengeCard('克制新星', '预算使用低于80%', this.budgetRate() < 0.8)
-          this.ChallengeCard('连续记账', '本月已记录7天', true)
+          this.ChallengeCard('连续记账', `已记录${this.recordedDayCount()}天`, this.recordedDayCount() >= 7)
         }
         Row({ space: 12 }) {
-          this.ChallengeCard('少点外卖', '餐饮支出下降10%', false)
+          this.ChallengeCard('少点外卖', '近3天餐饮下降10%', this.diningExpenseImproved())
           this.ChallengeCard('结余守护', '保持正结余', this.balance() > 0)
         }
         .margin({ top: 12 })
