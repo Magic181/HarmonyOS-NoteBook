@@ -1,6 +1,6 @@
 {
   "modelVersion": "5.0.2",
-  "description": "Please describe the basic information.",
+  "description": "简账是一款基于 HarmonyOS NEXT 的智能记账本应用。",
   "dependencies": {
   },
   "devDependencies": {
