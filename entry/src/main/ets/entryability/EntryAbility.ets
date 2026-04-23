@@ -10,7 +10,6 @@ const LIGHT_WINDOW_BACKGROUND = '#F5F8F8';
 const DARK_WINDOW_BACKGROUND = '#111827';
 
 export default class EntryAbility extends UIAbility {
-  private windowStage?: window.WindowStage;
   private mainWindow?: window.Window;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -25,7 +24,6 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
-    this.windowStage = windowStage;
     this.prepareWindowBackground(windowStage);
     this.loadMainContent(windowStage);
   }
@@ -99,6 +97,5 @@ export default class EntryAbility extends UIAbility {
 
   private releaseWindowResources(): void {
     this.mainWindow = undefined;
-    this.windowStage = undefined;
   }
 }

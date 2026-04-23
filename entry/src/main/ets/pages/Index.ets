@@ -149,16 +149,6 @@ struct Index {
     return color;
   }
 
-  private categoryTotal(category: string): number {
-    let total = 0;
-    this.records.forEach((item: BillRecord) => {
-      if (item.type === '支出' && item.category === category) {
-        total += item.amount;
-      }
-    });
-    return total;
-  }
-
   private categoryTotalByType(type: string, category: string): number {
     let total = 0;
     this.records.forEach((item: BillRecord) => {
