@@ -12,6 +12,20 @@ interface CategoryMeta {
   color: string;
 }
 
+interface CategoryStat {
+  name: string;
+  color: string;
+  total: number;
+  count: number;
+  rate: number;
+}
+
+interface TrendPoint {
+  label: string;
+  amount: number;
+  count: number;
+}
+
 interface ThemeMeta {
   name: string;
   primary: string;
@@ -47,18 +61,13 @@ const THEMES: ThemeMeta[] = [
   { name: '沉静紫', primary: '#7F75A8', soft: '#EFECF6', surface: '#F8F7FB', warn: '#D46D62' }
 ];
 
-const HEAT_DAYS: number[] = [
-  1, 2, 3, 4, 5, 6, 7,
-  8, 9, 10, 11, 12, 13, 14,
-  15, 16, 17, 18, 19, 20, 21,
-  22, 23, 24, 25, 26, 27, 28,
-  29, 30
-];
+const TREND_LABELS: string[] = ['周一', '周二', '周三', '周四', '周五', '昨天', '今天'];
 
 @Entry
 @Component
 struct Index {
   @State activeTab: number = 0;
+  @State reportType: string = '支出';
   @State recordType: string = '支出';
   @State selectedCategory: string = '餐饮';
   @State amountText: string = '';
@@ -150,26 +159,183 @@ struct Index {
     return total;
   }
 
-  private heatAmount(day: number): number {
-    const samples: number[] = [0, 36, 58, 0, 188, 95, 44, 230, 72, 0, 51, 112, 18, 0, 320, 46, 64, 151, 0, 27, 88, 0, 176, 63, 34, 99, 210, 0, 54, 135];
-    return samples[(day - 1) % samples.length];
+  private categoryTotalByType(type: string, category: string): number {
+    let total = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type && item.category === category) {
+        total += item.amount;
+      }
+    });
+    return total;
   }
 
-  private heatColor(day: number): string {
-    const amount = this.heatAmount(day);
-    if (amount === 0) {
-      return '#EEF1F2';
+  private categoryCountByType(type: string, category: string): number {
+    let count = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type && item.category === category) {
+        count++;
+      }
+    });
+    return count;
+  }
+
+  private countByType(type: string): number {
+    let count = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type) {
+        count++;
+      }
+    });
+    return count;
+  }
+
+  private averageByType(type: string): number {
+    const count = this.countByType(type);
+    if (count === 0) {
+      return 0;
     }
-    if (amount < 60) {
-      return '#DCEBE7';
+    return this.totalByType(type) / count;
+  }
+
+  private categoryStats(type: string): CategoryStat[] {
+    const metas = type === '支出' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+    const total = this.totalByType(type);
+    let stats: CategoryStat[] = [];
+    metas.forEach((item: CategoryMeta) => {
+      const categoryAmount = this.categoryTotalByType(type, item.name);
+      if (categoryAmount > 0) {
+        stats.push({
+          name: item.name,
+          color: item.color,
+          total: categoryAmount,
+          count: this.categoryCountByType(type, item.name),
+          rate: total > 0 ? categoryAmount / total * 100 : 0
+        });
+      }
+    });
+    stats.sort((left: CategoryStat, right: CategoryStat) => right.total - left.total);
+    return stats;
+  }
+
+  private topCategoryStat(type: string): CategoryStat {
+    const stats = this.categoryStats(type);
+    if (stats.length > 0) {
+      return stats[0];
     }
-    if (amount < 120) {
-      return '#B8D7CE';
+    return { name: '暂无', color: '#8A8F98', total: 0, count: 0, rate: 0 };
+  }
+
+  private recordDayIndex(time: string): number {
+    if (time.indexOf('刚刚') >= 0 || time.indexOf('今天') >= 0) {
+      return 6;
     }
-    if (amount < 220) {
-      return '#84B9AA';
+    if (time.indexOf('昨天') >= 0) {
+      return 5;
     }
-    return '#4F9482';
+    if (time.indexOf('周一') >= 0) {
+      return 0;
+    }
+    if (time.indexOf('周二') >= 0) {
+      return 1;
+    }
+    if (time.indexOf('周三') >= 0) {
+      return 2;
+    }
+    if (time.indexOf('周四') >= 0) {
+      return 3;
+    }
+    if (time.indexOf('周五') >= 0 || time.indexOf('周六') >= 0 || time.indexOf('周日') >= 0) {
+      return 4;
+    }
+    return 6;
+  }
+
+  private trendPoints(type: string): TrendPoint[] {
+    let points: TrendPoint[] = [];
+    for (let index = 0; index < TREND_LABELS.length; index++) {
+      points.push({ label: TREND_LABELS[index], amount: 0, count: 0 });
+    }
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type) {
+        const dayIndex = this.recordDayIndex(item.time);
+        points[dayIndex].amount += item.amount;
+        points[dayIndex].count++;
+      }
+    });
+    return points;
+  }
+
+  private maxTrendAmount(type: string): number {
+    let maxAmount = 0;
+    this.trendPoints(type).forEach((point: TrendPoint) => {
+      if (point.amount > maxAmount) {
+        maxAmount = point.amount;
+      }
+    });
+    return maxAmount;
+  }
+
+  private trendBarHeight(amount: number, type: string): number {
+    const maxAmount = this.maxTrendAmount(type);
+    if (maxAmount <= 0) {
+      return 8;
+    }
+    return Math.max(10, Math.round(amount / maxAmount * 96));
+  }
+
+  private largestRecordTitle(type: string): string {
+    let title = '暂无记录';
+    let amount = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type && item.amount > amount) {
+        title = item.title;
+        amount = item.amount;
+      }
+    });
+    return title;
+  }
+
+  private largestRecordAmount(type: string): number {
+    let amount = 0;
+    this.records.forEach((item: BillRecord) => {
+      if (item.type === type && item.amount > amount) {
+        amount = item.amount;
+      }
+    });
+    return amount;
+  }
+
+  private reportPrimaryColor(): string {
+    return this.reportType === '支出' ? '#D46D62' : '#4E956C';
+  }
+
+  private budgetLeft(): number {
+    return Math.max(this.monthlyBudget - this.expenseTotal(), 0);
+  }
+
+  private savingRate(): number {
+    if (this.incomeTotal() <= 0) {
+      return 0;
+    }
+    return Math.max(this.balance() / this.incomeTotal() * 100, 0);
+  }
+
+  private reportAdvice(): string {
+    if (this.reportType === '收入') {
+      if (this.incomeTotal() <= 0) {
+        return '本月还没有收入记录，可以先补录工资、兼职或理财收益。';
+      }
+      return `当前结余率约${Math.round(this.savingRate())}%，建议把固定储蓄单独记为目标，避免结余被日常消费稀释。`;
+    }
+
+    const top = this.topCategoryStat('支出');
+    if (this.expenseTotal() <= 0) {
+      return '本月还没有支出记录，开始记第一笔后这里会生成可执行建议。';
+    }
+    if (this.budgetRate() >= 0.85) {
+      return `预算已使用${Math.round(this.budgetRate() * 100)}%，建议优先压缩${top.name}类支出。`;
+    }
+    return `${top.name}占支出${Math.round(top.rate)}%，本月预算还剩¥${this.money(this.budgetLeft())}，节奏还算健康。`;
   }
 
   private saveRecord(): void {
@@ -452,6 +618,183 @@ struct Index {
   }
 
   @Builder
+  ReportTypeButton(label: string) {
+    Text(label)
+      .fontSize(13)
+      .fontWeight(this.reportType === label ? FontWeight.Bold : FontWeight.Regular)
+      .fontColor(this.reportType === label ? '#FFFFFF' : '#56616B')
+      .textAlign(TextAlign.Center)
+      .height(32)
+      .padding({ left: 18, right: 18 })
+      .borderRadius(16)
+      .backgroundColor(this.reportType === label ? this.reportPrimaryColor() : '#EEF1F2')
+      .onClick(() => {
+        this.reportType = label;
+      })
+  }
+
+  @Builder
+  ReportMetricCard(label: string, value: string, hint: string, color: string) {
+    Column({ space: 5 }) {
+      Text(label)
+        .fontSize(11)
+        .fontColor('#7A838C')
+      Text(value)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+        .maxLines(1)
+      Text(hint)
+        .fontSize(10)
+        .fontColor('#8A929A')
+        .maxLines(1)
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding(12)
+    .height(82)
+    .borderRadius(16)
+    .backgroundColor('#F7F9F9')
+    .layoutWeight(1)
+  }
+
+  @Builder
+  TrendChart() {
+    Column({ space: 12 }) {
+      Row() {
+        Column({ space: 4 }) {
+          Text(`${this.reportType}趋势`)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1E252B')
+          Text('按账单时间自动汇总')
+            .fontSize(12)
+            .fontColor('#7A838C')
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        Text(`¥${this.money(this.totalByType(this.reportType))}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.reportPrimaryColor())
+      }
+      Row({ space: 8 }) {
+        ForEach(this.trendPoints(this.reportType), (point: TrendPoint) => {
+          Column({ space: 7 }) {
+            Text(point.amount > 0 ? this.money(point.amount) : '-')
+              .fontSize(9)
+              .fontColor('#7A838C')
+              .maxLines(1)
+            Column() {
+              Blank()
+              Column()
+                .height(this.trendBarHeight(point.amount, this.reportType))
+                .width('100%')
+                .borderRadius(8)
+                .backgroundColor(point.amount > 0 ? this.reportPrimaryColor() : '#E8ECEE')
+            }
+            .height(104)
+            .width('100%')
+            Text(point.label)
+              .fontSize(10)
+              .fontColor(point.count > 0 ? '#2C343B' : '#9AA1A8')
+              .maxLines(1)
+          }
+          .layoutWeight(1)
+        }, (point: TrendPoint) => point.label)
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .shadow({ radius: 12, color: '#0C4F5B61', offsetX: 0, offsetY: 5 })
+  }
+
+  @Builder
+  CategoryRank() {
+    Column({ space: 12 }) {
+      if (this.categoryStats(this.reportType).length === 0) {
+        Text(`暂无${this.reportType}分类数据`)
+          .fontSize(13)
+          .fontColor('#7A838C')
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 18, bottom: 18 })
+      } else {
+        ForEach(this.categoryStats(this.reportType), (item: CategoryStat) => {
+          Column({ space: 8 }) {
+            Row({ space: 10 }) {
+              Text(item.name.substring(0, 1))
+                .fontSize(12)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+                .textAlign(TextAlign.Center)
+                .width(28)
+                .height(28)
+                .borderRadius(14)
+                .backgroundColor(item.color)
+              Column({ space: 3 }) {
+                Row() {
+                  Text(item.name)
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#2C343B')
+                  Blank()
+                  Text(`${Math.round(item.rate)}%`)
+                    .fontSize(12)
+                    .fontColor('#7A838C')
+                }
+                Text(`${item.count}笔 · ¥${this.money(item.total)}`)
+                  .fontSize(11)
+                  .fontColor('#8A929A')
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+            }
+            Progress({ value: item.rate, total: 100, type: ProgressType.Linear })
+              .color(item.color)
+              .backgroundColor('#EDF0F1')
+              .height(7)
+          }
+        }, (item: CategoryStat) => item.name)
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+  }
+
+  @Builder
+  InsightPanel() {
+    Column({ space: 12 }) {
+      Row({ space: 10 }) {
+        Text('建议')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#FFFFFF')
+          .textAlign(TextAlign.Center)
+          .width(42)
+          .height(28)
+          .borderRadius(14)
+          .backgroundColor(this.currentTheme().primary)
+        Text(this.reportAdvice())
+          .fontSize(14)
+          .fontColor('#2C343B')
+          .layoutWeight(1)
+      }
+      Row({ space: 10 }) {
+        this.ReportMetricCard('最高分类', this.topCategoryStat(this.reportType).name, `¥${this.money(this.topCategoryStat(this.reportType).total)}`, this.topCategoryStat(this.reportType).color)
+        this.ReportMetricCard('最大单笔', `¥${this.money(this.largestRecordAmount(this.reportType))}`, this.largestRecordTitle(this.reportType), this.reportPrimaryColor())
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(22)
+    .backgroundColor(this.currentTheme().soft)
+  }
+
+  @Builder
   HomePage() {
     Scroll() {
       Column() {
@@ -608,110 +951,36 @@ struct Index {
   ReportsPage() {
     Scroll() {
       Column() {
-        this.SectionTitle('统计报表', '本月')
-        Column({ space: 16 }) {
-          Row() {
-            Column({ space: 4 }) {
-              Text('消费趋势')
-                .fontSize(17)
-                .fontWeight(FontWeight.Bold)
-              Text('近7日支出对比')
-                .fontSize(12)
-                .fontColor('#7A838C')
-            }
-            .alignItems(HorizontalAlign.Start)
-            Blank()
-            Text(`¥${this.money(this.expenseTotal())}`)
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#D46D62')
-          }
-          Row({ space: 8 }) {
-            ForEach([42, 68, 36, 92, 55, 76, 48], (height: number, index: number) => {
-              Column() {
-                Blank()
-                Column()
-                  .height(height)
-                  .width('100%')
-                  .borderRadius(10)
-                  .backgroundColor(index === 3 ? this.currentTheme().primary : '#D9E5E8')
-              }
-              .height(112)
-              .layoutWeight(1)
-            }, (height: number, index: number) => `${index}`)
-          }
+        this.SectionTitle('统计报表', '实时')
+        Row({ space: 10 }) {
+          this.ReportTypeButton('支出')
+          this.ReportTypeButton('收入')
+          Blank()
         }
         .width('100%')
-        .padding(16)
-        .borderRadius(22)
-        .backgroundColor('#FFFFFF')
-        .shadow({ radius: 12, color: '#0C4F5B61', offsetX: 0, offsetY: 5 })
+        .margin({ bottom: 12 })
 
-        this.SectionTitle('分类排行')
-        Column({ space: 12 }) {
-          ForEach(EXPENSE_CATEGORIES.slice(0, 5), (item: CategoryMeta) => {
-            Row({ space: 12 }) {
-              Text(item.name)
-                .fontSize(14)
-                .fontColor('#2C343B')
-                .width(48)
-              Progress({ value: this.expenseTotal() > 0 ? this.categoryTotal(item.name) / this.expenseTotal() * 100 : 0, total: 100, type: ProgressType.Linear })
-                .color(item.color)
-                .backgroundColor('#EDF0F1')
-                .height(8)
-                .layoutWeight(1)
-              Text(`¥${this.money(this.categoryTotal(item.name))}`)
-                .fontSize(13)
-                .fontColor('#687078')
-                .width(68)
-                .textAlign(TextAlign.End)
-            }
-          }, (item: CategoryMeta) => item.name)
+        Row({ space: 10 }) {
+          this.ReportMetricCard(`${this.reportType}总额`, `¥${this.money(this.totalByType(this.reportType))}`, `${this.countByType(this.reportType)}笔记录`, this.reportPrimaryColor())
+          this.ReportMetricCard('单笔均值', `¥${this.money(this.averageByType(this.reportType))}`, '用于判断日常强度', this.currentTheme().primary)
         }
         .width('100%')
-        .padding(16)
-        .borderRadius(22)
-        .backgroundColor('#FFFFFF')
+        .margin({ bottom: 12 })
 
-        this.SectionTitle('消费热力图')
-        Grid() {
-          ForEach(HEAT_DAYS, (day: number) => {
-            GridItem() {
-              Text(`${day}`)
-                .fontSize(11)
-                .fontColor(this.heatAmount(day) > 180 ? '#FFFFFF' : '#44505A')
-                .textAlign(TextAlign.Center)
-                .width('100%')
-                .height(34)
-                .borderRadius(9)
-                .backgroundColor(this.heatColor(day))
-            }
-          }, (day: number) => `${day}`)
+        Row({ space: 10 }) {
+          this.ReportMetricCard('本月结余', `¥${this.money(this.balance())}`, `结余率${Math.round(this.savingRate())}%`, this.balance() >= 0 ? '#4E956C' : '#D46D62')
+          this.ReportMetricCard('预算剩余', `¥${this.money(this.budgetLeft())}`, `已用${Math.round(this.budgetRate() * 100)}%`, this.budgetRate() >= 0.85 ? '#D46D62' : this.currentTheme().primary)
         }
-        .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
-        .rowsGap(8)
-        .columnsGap(8)
         .width('100%')
-        .padding(14)
-        .borderRadius(22)
-        .backgroundColor('#FFFFFF')
 
-        this.SectionTitle('AI月报')
-        Column({ space: 10 }) {
-          Text('餐饮支出占比最高，最近外卖和咖啡频次偏高。')
-            .fontSize(15)
-            .fontColor('#2C343B')
-            .width('100%')
-          Text('建议把每周饮品预算控制在80元内，本月预计可节省约120元。')
-            .fontSize(14)
-            .fontColor('#687078')
-            .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding(16)
-        .borderRadius(22)
-        .backgroundColor(this.currentTheme().soft)
+        this.SectionTitle('趋势')
+        this.TrendChart()
+
+        this.SectionTitle('分类排行', `${this.categoryStats(this.reportType).length}类`)
+        this.CategoryRank()
+
+        this.SectionTitle('洞察')
+        this.InsightPanel()
       }
       .width('100%')
       .padding({ left: 14, right: 14, top: 12, bottom: 90 })
