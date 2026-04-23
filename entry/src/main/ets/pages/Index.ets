@@ -41,10 +41,10 @@ const INCOME_CATEGORIES: CategoryMeta[] = [
 ];
 
 const THEMES: ThemeMeta[] = [
-  { name: '静谧蓝', primary: '#5D8AA8', soft: '#E8F0F3', surface: '#F7FAFB', warn: '#E98155' },
-  { name: '活力橙', primary: '#D98654', soft: '#F8ECE3', surface: '#FFFBF7', warn: '#C75B55' },
-  { name: '松石绿', primary: '#5F9A8B', soft: '#E7F2EE', surface: '#F8FCFA', warn: '#D88255' },
-  { name: '沉静紫', primary: '#7F75A8', soft: '#EFECF6', surface: '#FBFAFD', warn: '#D46D62' }
+  { name: '静谧蓝', primary: '#4F7F98', soft: '#E8F0F3', surface: '#F5F8F8', warn: '#E98155' },
+  { name: '活力橙', primary: '#D98654', soft: '#F8ECE3', surface: '#FBF7F3', warn: '#C75B55' },
+  { name: '松石绿', primary: '#5F9A8B', soft: '#E7F2EE', surface: '#F5FAF8', warn: '#D88255' },
+  { name: '沉静紫', primary: '#7F75A8', soft: '#EFECF6', surface: '#F8F7FB', warn: '#D46D62' }
 ];
 
 const HEAT_DAYS: number[] = [
@@ -238,6 +238,24 @@ struct Index {
     this.amountText += value;
   }
 
+  private normalizeAmount(value: string): string {
+    let result = '';
+    let hasDot = false;
+    for (let index = 0; index < value.length; index++) {
+      const char = value.charAt(index);
+      if (char >= '0' && char <= '9') {
+        result += char;
+      } else if (char === '.' && !hasDot) {
+        result += char;
+        hasDot = true;
+      }
+      if (result.length >= 10) {
+        break;
+      }
+    }
+    return result;
+  }
+
   private parseAiText(): void {
     const text = this.aiText.trim();
     if (text.length === 0) {
@@ -272,22 +290,21 @@ struct Index {
 
   @Builder
   StatCard(label: string, value: string, color: string) {
-    Column({ space: 4 }) {
+    Column({ space: 3 }) {
       Text(label)
-        .fontSize(12)
-        .fontColor('#687078')
+        .fontSize(10)
+        .fontColor('#EAF2F5')
       Text(value)
-        .fontSize(20)
+        .fontSize(15)
         .fontWeight(FontWeight.Bold)
-        .fontColor(color)
+        .fontColor('#FFFFFF')
         .maxLines(1)
     }
     .alignItems(HorizontalAlign.Start)
-    .padding(14)
-    .height(76)
-    .borderRadius(20)
-    .backgroundColor('#FFFFFF')
-    .shadow({ radius: 12, color: '#14000000', offsetX: 0, offsetY: 6 })
+    .padding({ left: 12, right: 10, top: 11, bottom: 10 })
+    .height(52)
+    .borderRadius(16)
+    .backgroundColor('#20FFFFFF')
     .layoutWeight(1)
   }
 
@@ -295,7 +312,7 @@ struct Index {
   SectionTitle(title: string, action: string = '') {
     Row() {
       Text(title)
-        .fontSize(18)
+        .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor('#1E252B')
       Blank()
@@ -306,7 +323,7 @@ struct Index {
       }
     }
     .width('100%')
-    .margin({ top: 18, bottom: 10 })
+    .margin({ top: 14, bottom: 8 })
   }
 
   @Builder
@@ -316,8 +333,8 @@ struct Index {
       .fontWeight(this.recordType === value ? FontWeight.Bold : FontWeight.Regular)
       .fontColor(this.recordType === value ? '#FFFFFF' : '#56616B')
       .textAlign(TextAlign.Center)
-      .padding({ top: 9, bottom: 9 })
-      .borderRadius(12)
+      .padding({ top: 7, bottom: 7 })
+      .borderRadius(16)
       .backgroundColor(this.recordType === value ? this.currentTheme().primary : '#EEF1F2')
       .layoutWeight(1)
       .onClick(() => {
@@ -333,16 +350,16 @@ struct Index {
         GridItem() {
           Column({ space: 7 }) {
             Text(item.name.substring(0, 1))
-              .fontSize(15)
+              .fontSize(13)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.selectedCategory === item.name ? '#FFFFFF' : item.color)
               .textAlign(TextAlign.Center)
-              .width(40)
-              .height(40)
-              .borderRadius(20)
+              .width(32)
+              .height(32)
+              .borderRadius(16)
               .backgroundColor(this.selectedCategory === item.name ? item.color : '#F4F6F6')
             Text(item.name)
-              .fontSize(12)
+              .fontSize(11)
               .fontColor('#4A545D')
           }
           .width('100%')
@@ -353,20 +370,20 @@ struct Index {
       }, (item: CategoryMeta) => item.name)
     }
     .columnsTemplate('1fr 1fr 1fr 1fr 1fr')
-    .rowsGap(12)
+    .rowsGap(10)
     .columnsGap(6)
-    .height(this.recordType === '支出' ? 132 : 70)
+    .height(this.recordType === '支出' ? 126 : 58)
   }
 
   @Builder
   KeyButton(value: string) {
     Button(value)
-      .fontSize(20)
+      .fontSize(15)
       .fontWeight(FontWeight.Medium)
       .fontColor('#222A30')
-      .height(48)
-      .borderRadius(14)
-      .backgroundColor('#F2F4F4')
+      .height(38)
+      .borderRadius(12)
+      .backgroundColor('#F3F6F6')
       .onClick(() => {
         if (value === '退格') {
           if (this.amountText.length > 0) {
@@ -382,19 +399,19 @@ struct Index {
 
   @Builder
   RecordRow(item: BillRecord) {
-    Row({ space: 12 }) {
+    Row({ space: 10 }) {
       Text(item.category.substring(0, 1))
-        .fontSize(16)
+        .fontSize(14)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
         .textAlign(TextAlign.Center)
-        .width(42)
-        .height(42)
-        .borderRadius(21)
+        .width(36)
+        .height(36)
+        .borderRadius(18)
         .backgroundColor(this.categoryColor(item.category))
       Column({ space: 4 }) {
         Text(item.title)
-          .fontSize(15)
+          .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor('#1F272D')
           .maxLines(1)
@@ -405,7 +422,7 @@ struct Index {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       Text(`${item.type === '支出' ? '-' : '+'}${this.money(item.amount)}`)
-        .fontSize(16)
+        .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(item.type === '支出' ? '#D46D62' : '#4E956C')
       Button('编辑')
@@ -430,7 +447,7 @@ struct Index {
         })
     }
     .width('100%')
-    .padding({ top: 12, bottom: 12 })
+    .padding({ top: 10, bottom: 10 })
     .border({ width: { bottom: 1 }, color: '#EEF0F1' })
   }
 
@@ -438,26 +455,27 @@ struct Index {
   HomePage() {
     Scroll() {
       Column() {
-        Column({ space: 18 }) {
+        Column({ space: 14 }) {
           Row() {
             Column({ space: 6 }) {
               Text('简账')
-                .fontSize(28)
+                .fontSize(21)
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#FFFFFF')
               Text('让每一笔钱都清清楚楚')
-                .fontSize(13)
+                .fontSize(11)
                 .fontColor('#EAF2F5')
             }
             .alignItems(HorizontalAlign.Start)
             Blank()
             Text(THEMES[this.themeIndex].name)
-              .fontSize(12)
+              .fontSize(11)
               .fontColor('#FFFFFF')
-              .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
               .borderRadius(16)
               .backgroundColor('#26FFFFFF')
           }
+          .width('100%')
           Row({ space: 10 }) {
             this.StatCard('本月支出', `¥${this.money(this.expenseTotal())}`, '#D46D62')
             this.StatCard('本月收入', `¥${this.money(this.incomeTotal())}`, '#4E956C')
@@ -465,39 +483,39 @@ struct Index {
           }
         }
         .width('100%')
-        .padding(20)
-        .borderRadius(28)
+        .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+        .borderRadius(22)
         .linearGradient({
           angle: 135,
           colors: [[this.currentTheme().primary, 0], ['#7E9C9A', 1]]
         })
 
         this.SectionTitle(this.editingId > 0 ? '编辑账单' : '快捷记账', 'AI识别')
-        Column({ space: 14 }) {
+        Column({ space: 10 }) {
           TextInput({ placeholder: '试试：今天午饭花了35块', text: this.aiText })
-            .height(44)
-            .fontSize(14)
-            .borderRadius(14)
-            .backgroundColor('#F4F6F6')
+            .height(36)
+            .fontSize(12)
+            .borderRadius(16)
+            .backgroundColor('#F5F7F7')
             .onChange((value: string) => {
               this.aiText = value;
             })
           Row({ space: 10 }) {
             Button('识别账单')
-              .fontSize(14)
+              .fontSize(12)
               .fontColor('#FFFFFF')
-              .height(40)
-              .borderRadius(12)
+              .height(34)
+              .borderRadius(16)
               .backgroundColor(this.currentTheme().primary)
               .layoutWeight(1)
               .onClick(() => {
                 this.parseAiText();
               })
             Button(this.editingId > 0 ? '取消编辑' : '重置')
-              .fontSize(14)
+              .fontSize(12)
               .fontColor('#56616B')
-              .height(40)
-              .borderRadius(12)
+              .height(34)
+              .borderRadius(16)
               .backgroundColor('#EEF1F2')
               .layoutWeight(1)
               .onClick(() => {
@@ -510,55 +528,51 @@ struct Index {
           }
           Row() {
             Text('¥')
-              .fontSize(26)
+              .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor('#56616B')
-            Text(this.amountText.length > 0 ? this.amountText : '0')
-              .fontSize(38)
+            TextInput({ placeholder: '0', text: this.amountText })
+              .fontSize(26)
               .fontWeight(FontWeight.Bold)
               .fontColor('#1E252B')
-              .maxLines(1)
+              .placeholderColor('#1E252B')
+              .backgroundColor('#00FFFFFF')
+              .padding({ left: 4, right: 4 })
+              .onChange((value: string) => {
+                this.amountText = this.normalizeAmount(value);
+              })
               .layoutWeight(1)
           }
           .width('100%')
-          .padding({ top: 4, bottom: 2 })
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .borderRadius(18)
+          .backgroundColor('#F7F9F9')
           this.CategoryGrid()
           TextInput({ placeholder: '备注，例如：午饭、奶茶、工资', text: this.noteText })
-            .height(44)
-            .fontSize(14)
-            .borderRadius(14)
-            .backgroundColor('#F4F6F6')
+            .height(36)
+            .fontSize(12)
+            .borderRadius(16)
+            .backgroundColor('#F5F7F7')
             .onChange((value: string) => {
               this.noteText = value;
             })
-          Grid() {
-            ForEach(['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '退格'], (value: string) => {
-              GridItem() {
-                this.KeyButton(value)
-              }
-            }, (value: string) => value)
-          }
-          .columnsTemplate('1fr 1fr 1fr')
-          .rowsGap(8)
-          .columnsGap(8)
-          .height(216)
           Row({ space: 10 }) {
             Button('清空')
-              .fontSize(15)
+              .fontSize(12)
               .fontColor('#56616B')
-              .height(48)
-              .borderRadius(14)
+              .height(38)
+              .borderRadius(16)
               .backgroundColor('#EEF1F2')
               .layoutWeight(1)
               .onClick(() => {
                 this.amountText = '';
               })
             Button(this.editingId > 0 ? '保存修改' : '完成记账')
-              .fontSize(16)
+              .fontSize(13)
               .fontWeight(FontWeight.Bold)
               .fontColor('#FFFFFF')
-              .height(48)
-              .borderRadius(14)
+              .height(38)
+              .borderRadius(16)
               .backgroundColor(this.currentTheme().primary)
               .layoutWeight(2)
               .onClick(() => {
@@ -567,9 +581,10 @@ struct Index {
           }
         }
         .width('100%')
-        .padding(16)
-        .borderRadius(24)
+        .padding(14)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
+        .shadow({ radius: 14, color: '#0F4F5B61', offsetX: 0, offsetY: 6 })
 
         this.SectionTitle('最近账单', `${this.records.length}笔`)
         Column() {
@@ -579,11 +594,11 @@ struct Index {
         }
         .width('100%')
         .padding({ left: 14, right: 14 })
-        .borderRadius(24)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 96 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 90 })
     }
     .width('100%')
     .height('100%')
@@ -598,7 +613,7 @@ struct Index {
           Row() {
             Column({ space: 4 }) {
               Text('消费趋势')
-                .fontSize(18)
+                .fontSize(17)
                 .fontWeight(FontWeight.Bold)
               Text('近7日支出对比')
                 .fontSize(12)
@@ -607,7 +622,7 @@ struct Index {
             .alignItems(HorizontalAlign.Start)
             Blank()
             Text(`¥${this.money(this.expenseTotal())}`)
-              .fontSize(18)
+              .fontSize(17)
               .fontWeight(FontWeight.Bold)
               .fontColor('#D46D62')
           }
@@ -627,9 +642,10 @@ struct Index {
           }
         }
         .width('100%')
-        .padding(18)
-        .borderRadius(24)
+        .padding(16)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
+        .shadow({ radius: 12, color: '#0C4F5B61', offsetX: 0, offsetY: 5 })
 
         this.SectionTitle('分类排行')
         Column({ space: 12 }) {
@@ -653,8 +669,8 @@ struct Index {
           }, (item: CategoryMeta) => item.name)
         }
         .width('100%')
-        .padding(18)
-        .borderRadius(24)
+        .padding(16)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
 
         this.SectionTitle('消费热力图')
@@ -676,8 +692,8 @@ struct Index {
         .rowsGap(8)
         .columnsGap(8)
         .width('100%')
-        .padding(16)
-        .borderRadius(24)
+        .padding(14)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
 
         this.SectionTitle('AI月报')
@@ -693,12 +709,12 @@ struct Index {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding(18)
-        .borderRadius(24)
+        .padding(16)
+        .borderRadius(22)
         .backgroundColor(this.currentTheme().soft)
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 96 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 90 })
     }
   }
 
@@ -714,7 +730,7 @@ struct Index {
             .width('100%')
           Row() {
             Text(`¥${this.money(this.monthlyBudget)}`)
-              .fontSize(34)
+              .fontSize(30)
               .fontWeight(FontWeight.Bold)
               .fontColor('#1E252B')
             Blank()
@@ -751,9 +767,10 @@ struct Index {
           }
         }
         .width('100%')
-        .padding(20)
-        .borderRadius(24)
+        .padding(18)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
+        .shadow({ radius: 12, color: '#0C4F5B61', offsetX: 0, offsetY: 5 })
 
         this.SectionTitle('挑战赛')
         Row({ space: 12 }) {
@@ -767,7 +784,7 @@ struct Index {
         .margin({ top: 12 })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 96 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 90 })
     }
   }
 
@@ -790,10 +807,10 @@ struct Index {
         .textAlign(TextAlign.Center)
     }
     .justifyContent(FlexAlign.Center)
-    .height(132)
+    .height(122)
     .layoutWeight(1)
-    .padding(14)
-    .borderRadius(24)
+    .padding(12)
+    .borderRadius(22)
     .backgroundColor('#FFFFFF')
   }
 
@@ -804,7 +821,7 @@ struct Index {
         this.SectionTitle('个人中心')
         Column({ space: 12 }) {
           Text('简账默认账本')
-            .fontSize(20)
+            .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor('#1E252B')
             .width('100%')
@@ -815,8 +832,8 @@ struct Index {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding(20)
-        .borderRadius(24)
+        .padding(18)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
 
         this.SectionTitle('动态主题')
@@ -855,11 +872,11 @@ struct Index {
         }
         .width('100%')
         .padding({ left: 16, right: 16 })
-        .borderRadius(24)
+        .borderRadius(22)
         .backgroundColor('#FFFFFF')
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 96 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 90 })
     }
   }
 
@@ -867,15 +884,15 @@ struct Index {
   SettingRow(title: string, value: string) {
     Row() {
       Text(title)
-        .fontSize(15)
+        .fontSize(14)
         .fontColor('#2C343B')
       Blank()
       Text(value)
-        .fontSize(13)
+        .fontSize(12)
         .fontColor('#7A838C')
     }
     .width('100%')
-    .padding({ top: 15, bottom: 15 })
+    .padding({ top: 14, bottom: 14 })
     .border({ width: { bottom: 1 }, color: '#EEF0F1' })
   }
 
@@ -883,16 +900,16 @@ struct Index {
   TabItem(title: string, index: number) {
     Column({ space: 4 }) {
       Text(title)
-        .fontSize(14)
+        .fontSize(12)
         .fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Regular)
         .fontColor(this.activeTab === index ? this.currentTheme().primary : '#7A838C')
       Column()
-        .width(18)
+        .width(16)
         .height(3)
         .borderRadius(2)
         .backgroundColor(this.activeTab === index ? this.currentTheme().primary : '#00FFFFFF')
     }
-    .height(58)
+    .height(50)
     .justifyContent(FlexAlign.Center)
     .layoutWeight(1)
     .onClick(() => {
@@ -923,13 +940,13 @@ struct Index {
         this.TabItem('预算', 2)
         this.TabItem('我的', 3)
       }
-      .width('92%')
-      .height(64)
-      .margin({ bottom: 14 })
+      .width('88%')
+      .height(54)
+      .margin({ bottom: 10 })
       .padding({ left: 8, right: 8 })
-      .borderRadius(24)
+      .borderRadius(20)
       .backgroundColor('#FFFFFF')
-      .shadow({ radius: 18, color: '#22000000', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 16, color: '#1A000000', offsetX: 0, offsetY: 7 })
     }
     .width('100%')
     .height('100%')
